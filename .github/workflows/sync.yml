@@ -28,8 +28,8 @@ jobs:
           fi
 
           # Safely write .env
-          echo "TD_EMAIL=${{ secrets.TD_EMAIL }}" > .env
-          echo "TD_PASSWORD=${{ secrets.TD_PASSWORD }}" >> .env
+          echo "TD_USER_EMAIL=${{ secrets.TD_USER_EMAIL }}" > .env
+          echo "TD_USER_PASSWORD=${{ secrets.TD_USER_PASSWORD }}" >> .env
           echo "TD_COMPANY_ID=${{ secrets.TD_COMPANY_ID }}" >> .env
           echo "MONDAY_API_KEY=${{ secrets.MONDAY_API_KEY }}" >> .env
           echo "USER_GROUP_MAP='${{ secrets.USER_GROUP_MAP }}'" >> .env
