@@ -466,16 +466,15 @@ const stopTimeTracking = async (itemId, columnId) => {
       let clockOutTime = null;
 
       const lastTracked = userInfo.lastTrackGlobal?.activeAt;
+      const isOnline = userInfo.lastTrackGlobal?.online;
       const lastTrackedMoment = lastTracked ? dayjs(lastTracked).tz(CHICAGO_TZ) : null;
       
+      const minutesSinceLastActivity = lastTrackedMoment ? now.diff(lastTrackedMoment, 'minute') : null;
+      const idleTooLong = !isOnline && (minutesSinceLastActivity === null || minutesSinceLastActivity > BREAK_THRESHOLD_MINUTES);
       
-      const idleTooLong = lastTrackedMoment
-        ? now.diff(lastTrackedMoment, 'minute') > BREAK_THRESHOLD_MINUTES
-        : true; // treat as idle if no tracking
-      
-      if (lastTrackedMoment && lastTrackedMoment.isSame(now, 'day') && !idleTooLong) {
-        console.log(`🟢 ${email} is still working. Skipping Clock Out.`);
-        clockOutTime = null; // skip setting clock out
+      if (isOnline || (minutesSinceLastActivity !== null && minutesSinceLastActivity <= 30)) {
+        console.log(`🟢 ${email} is still working (last activity ${minutesSinceLastActivity}m ago). Skipping Clock Out.`);
+        clockOutTime = null;
       } else if (idleTooLong && logs.length > 0) {
         const lastLog = _.maxBy(logs, log =>
           new Date(dayjs(log.start).add(log.time, 'seconds').toISOString())
