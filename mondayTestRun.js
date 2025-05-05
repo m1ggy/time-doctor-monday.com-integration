@@ -105,7 +105,7 @@ const getGroupColumnDefinitions = async (boardId) => {
 (async () => {
   await getBoards();
 
-  const boardId = 0; 
+  const boardId = 9048206918; 
   await getGroups(boardId);
   await getGroupColumnDefinitions(boardId);
 })();

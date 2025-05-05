@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "sync": "node index.js"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +14,7 @@
     "axios": "^1.9.0",
     "dayjs": "^1.11.13",
     "dotenv": "^16.5.0",
+    "fs-extra": "^11.3.0",
     "lodash": "^4.17.21"
   }
 }

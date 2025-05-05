@@ -1,0 +1,48 @@
+name: Deploy Time Doctor Sync
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy to Remote via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          echo "🔐 Connecting to remote server..."
+
+          mkdir -p ~/timedoctor-sync
+          cd ~/timedoctor-sync
+
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/${{ github.repository }} . 
+          else
+            git pull origin main
+          fi
+
+          # Safely write .env
+          echo "TD_EMAIL=${{ secrets.TD_EMAIL }}" > .env
+          echo "TD_PASSWORD=${{ secrets.TD_PASSWORD }}" >> .env
+          echo "TD_COMPANY_ID=${{ secrets.TD_COMPANY_ID }}" >> .env
+          echo "MONDAY_API_KEY=${{ secrets.MONDAY_API_KEY }}" >> .env
+          echo "USER_GROUP_MAP='${{ secrets.USER_GROUP_MAP }}'" >> .env
+
+          # Install dependencies
+          corepack enable
+          corepack prepare pnpm@8.15.4 --activate
+          pnpm install
+
+          # Refresh cron job
+          ( crontab -l | grep -v 'cd ~/timedoctor-sync && pnpm run sync' ) 2>/dev/null > newcron
+          echo "*/30 * * * * cd ~/timedoctor-sync && pnpm run sync >> ~/timedoctor-sync/cron.log 2>&1" >> newcron
+          crontab newcron
+          rm newcron
+
+          echo "✅ Deployment complete and cron refreshed."
