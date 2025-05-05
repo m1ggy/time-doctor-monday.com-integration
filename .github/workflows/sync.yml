@@ -36,8 +36,17 @@ jobs:
           echo "USER_GROUP_MAP='${{ secrets.USER_GROUP_MAP }}'" >> .env
 
           # Install dependencies
-          corepack enable
-          corepack prepare pnpm@8.15.4 --activate
+          # Install Node.js & pnpm if not present
+          if ! command -v node &> /dev/null; then
+          echo "📦 Installing Node.js LTS..."
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          fi
+
+          if ! command -v pnpm &> /dev/null; then
+          echo "📦 Installing pnpm..."
+          npm install -g pnpm
+          fi
           pnpm install
 
           # Refresh cron job
