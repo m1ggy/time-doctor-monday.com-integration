@@ -463,24 +463,33 @@ const stopTimeTracking = async (itemId, columnId) => {
       const hoursWorked = totalSeconds / 3600;
       
     
+      const CHICAGO_TZ = 'America/Chicago';
+      const BREAK_THRESHOLD_MINUTES = 30;
       let clockOutTime = null;
-
+      
       const lastTracked = userInfo.lastTrackGlobal?.activeAt;
-      const isOnline = userInfo.lastTrackGlobal?.online;
+      const isOnline = userInfo.status === 'online'; // Use this instead of .online flag
+      const now = dayjs().tz(CHICAGO_TZ);
       const lastTrackedMoment = lastTracked ? dayjs(lastTracked).tz(CHICAGO_TZ) : null;
       
       const minutesSinceLastActivity = lastTrackedMoment ? now.diff(lastTrackedMoment, 'minute') : null;
       const idleTooLong = !isOnline && (minutesSinceLastActivity === null || minutesSinceLastActivity > BREAK_THRESHOLD_MINUTES);
       
-      if (isOnline || (minutesSinceLastActivity !== null && minutesSinceLastActivity <= 30)) {
+      if (isOnline || (minutesSinceLastActivity !== null && minutesSinceLastActivity <= BREAK_THRESHOLD_MINUTES)) {
         console.log(`🟢 ${email} is still working (last activity ${minutesSinceLastActivity}m ago). Skipping Clock Out.`);
         clockOutTime = null;
       } else if (idleTooLong && logs.length > 0) {
-        const lastLog = _.maxBy(logs, log =>
-          new Date(dayjs(log.start).add(log.time, 'seconds').toISOString())
-        );
-        clockOutTime = dayjs(lastLog.start).add(lastLog.time, 'seconds').tz(CHICAGO_TZ).format();
-        console.log(`📦 ${email} likely stopped. Clock Out = ${clockOutTime}`);
+        // Find the latest worklog end time
+        const lastLog = _.maxBy(logs, log => {
+          return dayjs(log.start).add(log.time, 'seconds').valueOf(); // timestamp for correct comparison
+        });
+      
+        if (lastLog) {
+          clockOutTime = dayjs(lastLog.start).add(lastLog.time, 'seconds').tz(CHICAGO_TZ).format();
+          console.log(`📦 ${email} likely stopped. Clock Out = ${clockOutTime}`);
+        } else {
+          console.warn(`⚠️ Could not determine lastLog for ${email}`);
+        }
       } else {
         console.warn(`⚠️ No clock-out info for ${email}`);
       }
