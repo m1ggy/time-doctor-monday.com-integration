@@ -459,93 +459,68 @@ const stopTimeTracking = async (itemId, columnId) => {
         continue;
       }
     
-      const { clockInTime, totalSeconds } = parseWorklogTimes(logs);
-      const hoursWorked = totalSeconds / 3600;
-      
-    
-      const CHICAGO_TZ = 'America/Chicago';
-      const BREAK_THRESHOLD_MINUTES = 30;
-      let clockOutTime = null;
-      
       const lastTracked = userInfo.lastTrackGlobal?.activeAt;
-      const isOnline = userInfo.status === 'online'; // Use this instead of .online flag
+      const isOnline = userInfo.status === 'online';
       const now = dayjs().tz(CHICAGO_TZ);
       const lastTrackedMoment = lastTracked ? dayjs(lastTracked).tz(CHICAGO_TZ) : null;
-      
       const minutesSinceLastActivity = lastTrackedMoment ? now.diff(lastTrackedMoment, 'minute') : null;
       const idleTooLong = !isOnline && (minutesSinceLastActivity === null || minutesSinceLastActivity > BREAK_THRESHOLD_MINUTES);
       
-      if (isOnline || (minutesSinceLastActivity !== null && minutesSinceLastActivity <= BREAK_THRESHOLD_MINUTES)) {
-        console.log(`🟢 ${email} is still working (last activity ${minutesSinceLastActivity}m ago). Skipping Clock Out.`);
-        clockOutTime = null;
-      } else if (idleTooLong && logs.length > 0) {
-        // Find the latest worklog end time
-        const lastLog = _.maxBy(logs, log => {
-          return dayjs(log.start).add(log.time, 'seconds').valueOf(); // timestamp for correct comparison
-        });
+      for (let i = 0; i < logs.length; i++) {
+        const log = logs[i];
+        const logStart = dayjs(log.start).tz(CHICAGO_TZ);
+        const logEnd = logStart.add(log.time, 'second');
+        const hoursWorked = log.time / 3600;
       
-        if (lastLog) {
-          clockOutTime = dayjs(lastLog.start).add(lastLog.time, 'seconds').tz(CHICAGO_TZ).format();
-          console.log(`📦 ${email} likely stopped. Clock Out = ${clockOutTime}`);
-        } else {
-          console.warn(`⚠️ Could not determine lastLog for ${email}`);
+        const isLastLog = i === logs.length - 1;
+        const shouldSetClockOut = !isLastLog || idleTooLong;
+      
+        const itemLabel = `${logStart.format('MMM D')} Time Log ${i + 1}`;
+      
+        let itemId = await findItemInGroup(boardId, groupId, itemLabel);
+        if (!itemId) {
+          console.log(`➕ Creating item "${itemLabel}" in group "${groupId}"`);
+          itemId = await createItemInGroup(boardId, groupId, itemLabel);
         }
-      } else {
-        console.warn(`⚠️ No clock-out info for ${email}`);
-      }
-    
-      console.log(`🕒 Clock In: ${clockInTime || 'N/A'}, Clock Out: ${clockOutTime || 'N/A'}, Hours Worked: ${hoursWorked.toFixed(2)}`);
-    
-      let itemId = await findItemInGroup(boardId, groupId, itemName);
-      if (!itemId && now.isSame(dayjs(), 'day')) {
-        console.log(`➕ Creating item "${itemName}" in group "${groupId}"`);
-        itemId = await createItemInGroup(boardId, groupId, itemName);
-      }
-    
-      if (!itemId) {
-        console.warn(`❌ No item found for "${itemName}" and not creating`);
-        continue;
-      }
-    
-      const existing = await getItemColumnValues(itemId, columnIds);
-      const updates = {};
-    
-      if (!existing.clockIn && clockInTime) {
-        const dt = dayjs(clockInTime).tz(CHICAGO_TZ);
-        updates[columnIds.clockIn] = {
-          hour: dt.hour(),
-          minute: dt.minute()
-        };
-      }
       
-      if (!existing.clockOut && clockOutTime) {
-        const dt = dayjs(clockOutTime).tz(CHICAGO_TZ);
-        updates[columnIds.clockOut] = {
-          hour: dt.hour(),
-          minute: dt.minute()
-        };
-      }
+        const existing = await getItemColumnValues(itemId, columnIds);
+        const updates = {};
       
-      if (!existing.date) {
-        const dt = dayjs(todayDate).tz(CHICAGO_TZ);
-        updates[columnIds.date] = {
-          date: dt.format('YYYY-MM-DD'),
-          time: dt.format('HH:mm:ss')
-        };
+        if (!existing.clockIn) {
+          updates[columnIds.clockIn] = {
+            hour: logStart.hour(),
+            minute: logStart.minute()
+          };
+        }
+      
+        if (!existing.clockOut && shouldSetClockOut && log.time > 0) {
+          updates[columnIds.clockOut] = {
+            hour: logEnd.hour(),
+            minute: logEnd.minute()
+          };
+        }
+      
+        if (!existing.date) {
+          updates[columnIds.date] = {
+            date: logStart.format('YYYY-MM-DD'),
+            time: logStart.format('HH:mm:ss')
+          };
+        }
+      
+        if (hoursWorked > 0) {
+          updates[columnIds.totalWorkedHours] = hoursWorked;
+        }
+      
+        if (_.isEmpty(updates)) {
+          console.log(`⏩ No updates needed for ${itemLabel} — already set`);
+          continue;
+        }
+      
+        await updateMondayItem(boardId, itemId, updates);
+        console.log(`✅ Updated ${itemLabel} for ${email}`);
       }
-
-      if (hoursWorked > 0) {
-        updates[columnIds.totalWorkedHours] = hoursWorked;
-      }
-    
-      if (_.isEmpty(updates)) {
-        console.log(`⏩ No updates needed — already set or missing data`);
-        continue;
-      }
-    
-      await updateMondayItem(boardId, itemId, updates);
-      console.log(`✅ Monday.com updated for ${email}`);
     }
+    
 
     // Summary of skipped users with no logs
     const skipped = userInfos.filter(u => !u.worklogs || u.worklogs.length === 0);
@@ -553,6 +528,7 @@ const stopTimeTracking = async (itemId, columnId) => {
     skipped.forEach(u => console.log(`- ${u.email}`));
 
   } catch (err) {
-    console.error('❌ Error:', err.response?.data || err.message || err);
+    console.error(err)
+    console.error('❌ Error:', JSON.stringify(err.response?.data || err.message || err, null, 2));
   }
 })();
